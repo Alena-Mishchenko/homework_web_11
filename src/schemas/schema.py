@@ -22,5 +22,8 @@ class ContactUpdate(BaseModel):
 class ContactResponse(ContactSchema):
     id: int
 
+    # class Config:
+    #     orm_mode = True
+
     class Config:
-        orm_mode = True
+        from_attributes = True
