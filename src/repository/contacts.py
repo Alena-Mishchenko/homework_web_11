@@ -3,30 +3,30 @@ from datetime import date, timedelta
 # from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 # from sqlalchemy.future import select, func
-from src.entity.models import Contact
+from src.entity.models import Contact, User
 from src.schemas.schema import ContactSchema, ContactUpdate
 from sqlalchemy import select, func
 
-async def get_contacts(limit: int, offset: int, db: AsyncSession) -> List[Contact]:
-    result = await db.execute(select(Contact).offset(offset).limit(limit))
+async def get_contacts(limit: int, offset: int, db: AsyncSession, user: User) -> List[Contact]:
+    result = await db.execute(select(Contact).filter(Contact.user_id == user.id).offset(offset).limit(limit))
     return result.scalars().all()
 
 
-async def get_contact(contact_id: int, db: AsyncSession) -> Contact:
-    result = await db.execute(select(Contact).filter(Contact.id == contact_id))
+async def get_contact(contact_id: int, db: AsyncSession, user: User) -> Contact:
+    result = await db.execute(select(Contact).filter(Contact.id == contact_id, Contact.user_id == user.id))
     return result.scalar_one_or_none()
   
 
-async def create_contact(body: ContactSchema, db: AsyncSession) -> Contact:
-    contact = Contact(**body.model_dump(exclude_unset=True))
+async def create_contact(body: ContactSchema, db: AsyncSession, user: User) -> Contact:
+    contact = Contact(**body.model_dump(exclude_unset=True), user=user)
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
     return contact
 
 
-async def remove_contact(contact_id: int, db: AsyncSession) -> Contact | None:
-    result = await db.execute(select(Contact).filter(Contact.id == contact_id))
+async def remove_contact(contact_id: int, db: AsyncSession, user: User) -> Contact | None:
+    result = await db.execute(select(Contact).filter(Contact.id == contact_id, Contact.user_id == user.id))
     contact = result.scalar_one_or_none()
     if contact:
         await db.delete(contact)
@@ -34,8 +34,8 @@ async def remove_contact(contact_id: int, db: AsyncSession) -> Contact | None:
     return contact
 
 
-async def update_contact(contact_id: int, body: ContactUpdate, db: AsyncSession) -> Contact | None:
-    result = await db.execute(select(Contact).filter(Contact.id == contact_id))
+async def update_contact(contact_id: int, body: ContactUpdate, db: AsyncSession, user: User) -> Contact | None:
+    result = await db.execute(select(Contact).filter(Contact.id == contact_id, Contact.user_id == user.id))
     contact = result.scalar_one_or_none()
     if contact:
         for key, value in body.model_dump(exclude_unset=True).items():
@@ -46,13 +46,14 @@ async def update_contact(contact_id: int, body: ContactUpdate, db: AsyncSession)
     return contact
 
 
-async def search_contacts(query: str, db: AsyncSession) -> List[Contact]:
+async def search_contacts(query: str, db: AsyncSession, user: User) -> List[Contact]:
     search_query = f"%{query}%"
     result = await db.execute(
         select(Contact).filter(
-            Contact.first_name.ilike(search_query) |
+            Contact.first_name.ilike(search_query)|
             Contact.last_name.ilike(search_query) |
-            Contact.email.ilike(search_query)
+            Contact.email.ilike(search_query)&
+            (Contact.user_id == user.id)
         )
     )
     return result.scalars().all()
@@ -79,7 +80,7 @@ async def search_contacts(query: str, db: AsyncSession) -> List[Contact]:
 
 
 
-async def get_birthdays_within_next_week(db: AsyncSession) -> List[Contact]:
+async def get_birthdays_within_next_week(db: AsyncSession, user: User) -> List[Contact]:
     current_date = date.today()
     next_week = current_date + timedelta(days=7)
 
@@ -90,7 +91,8 @@ async def get_birthdays_within_next_week(db: AsyncSession) -> List[Contact]:
     if current_date.month <= next_week.month:
         result = await db.execute(
             select(Contact).filter(
-                func.to_char(Contact.birthday, 'MM-DD').between(current_date_str, next_week_str)
+                func.to_char(Contact.birthday, 'MM-DD').between(current_date_str, next_week_str),
+                Contact.user_id == user.id
             )
         )
     else:
@@ -98,7 +100,8 @@ async def get_birthdays_within_next_week(db: AsyncSession) -> List[Contact]:
         result = await db.execute(
             select(Contact).filter(
                 (func.to_char(Contact.birthday, 'MM-DD').between(current_date_str, '12-31')) |
-                (func.to_char(Contact.birthday, 'MM-DD').between('01-01', next_week_str))
+                (func.to_char(Contact.birthday, 'MM-DD').between('01-01', next_week_str)),
+                Contact.user_id == user.id
             )
         )
 
