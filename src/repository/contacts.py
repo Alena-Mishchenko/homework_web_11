@@ -1,8 +1,8 @@
 from typing import List
 from datetime import date, timedelta
-# from sqlalchemy.orm import Session
+
 from sqlalchemy.ext.asyncio import AsyncSession
-# from sqlalchemy.future import select, func
+
 from src.entity.models import Contact, User
 from src.schemas.schema import ContactSchema, ContactUpdate
 from sqlalchemy import select, func
@@ -50,9 +50,9 @@ async def search_contacts(query: str, db: AsyncSession, user: User) -> List[Cont
     search_query = f"%{query}%"
     result = await db.execute(
         select(Contact).filter(
-            Contact.first_name.ilike(search_query)|
+            (Contact.first_name.ilike(search_query)|
             Contact.last_name.ilike(search_query) |
-            Contact.email.ilike(search_query)&
+            Contact.email.ilike(search_query))&
             (Contact.user_id == user.id)
         )
     )
@@ -60,31 +60,10 @@ async def search_contacts(query: str, db: AsyncSession, user: User) -> List[Cont
 
 
 
-# async def get_birthdays_within_next_week(db: AsyncSession) -> List[Contact]:
-#     current_date = date.today()
-#     next_week = current_date + timedelta(days=7)
-#     result = await db.execute(select(Contact))
-#     contacts = result.scalars().all()
-#     upcoming_birthdays = []
-#     for contact in contacts:
-#         birthday_this_year = contact.birthday.replace(year=current_date.year)
-
-#         if current_date <= birthday_this_year < next_week:
-#             upcoming_birthdays.append(contact)
-#         else:
-#             birthday_next_year = contact.birthday.replace(year=current_date.year + 1)
-#             if current_date <= birthday_next_year < next_week:
-#                 upcoming_birthdays.append(contact)
-#     return upcoming_birthdays
-
-
-
-
 async def get_birthdays_within_next_week(db: AsyncSession, user: User) -> List[Contact]:
     current_date = date.today()
     next_week = current_date + timedelta(days=7)
 
-    # Create the date strings for current date and next week
     current_date_str = current_date.strftime('%m-%d')
     next_week_str = next_week.strftime('%m-%d')
 
@@ -96,7 +75,6 @@ async def get_birthdays_within_next_week(db: AsyncSession, user: User) -> List[C
             )
         )
     else:
-        # Handle the year wrap-around
         result = await db.execute(
             select(Contact).filter(
                 (func.to_char(Contact.birthday, 'MM-DD').between(current_date_str, '12-31')) |
